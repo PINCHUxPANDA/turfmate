@@ -17,18 +17,16 @@ export const loginSchema = z.object({
   }),
 });
 
-export const completeMatchSchema = z.object({
-  params: z.object({
-    id: z.string().uuid(),
-  }),
+export const createMatchSchema = z.object({
   body: z.object({
-    attendees: z
-      .array(
-        z.object({
-          userId: z.string().uuid(),
-          attended: z.boolean(),
-        })
-      )
-      .min(1, 'At least one participant attendance record is required'),
+    title: z.string().min(3),
+    venueId: z.string().uuid().optional(),
+    customLocation: z.string().optional(),
+    city: z.string().min(2),
+    sportType: z.enum(['FOOTBALL', 'CRICKET', 'BASKETBALL', 'PICKLEBALL', 'BADMINTON']),
+    skillLevel: z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED']).default('INTERMEDIATE'),
+    date: z.string().datetime(),
+    maxPlayers: z.number().int().min(2).max(30),
+    costPerPerson: z.number().min(0),
   }),
 });

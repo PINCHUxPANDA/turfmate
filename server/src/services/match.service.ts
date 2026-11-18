@@ -3,6 +3,52 @@ import { prisma } from '../config/db';
 import { AppError } from '../utils/AppError';
 
 export class MatchService {
+  static async completeMatchAndRate(
+    matchId: string,
+    hostId: string,
+    attendanceList: Array<{ userId: string; attended: boolean }>
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const match = await tx.match.findUnique({ where: { id: matchId } });
+      if (!match) throw new AppError('Match not found.', 404);
+      if (match.hostId !== hostId) {
+        throw new AppError('Only the match host can complete the match and submit attendance.', 403);
+      }
+  
+      // 1. Mark match as COMPLETED
+      const updatedMatch = await tx.match.update({
+        where: { id: matchId },
+        data: { status: MatchStatus.COMPLETED },
+      });
+  
+      // 2. Update participant attendance and recalculate each player's Reliability Score (1-5 scale)
+      for (const entry of attendanceList) {
+        await tx.matchParticipant.update({
+          where: { matchId_userId: { matchId, userId: entry.userId } },
+          data: { attended: entry.attended },
+        });
+  
+        const user = await tx.user.findUnique({ where: { id: entry.userId } });
+        if (user) {
+          const matchScore = entry.attended ? 5.0 : 1.0;
+          const newTotal = user.totalMatches + 1;
+          const updatedRating = Number(
+            ((user.reliabilityRating * user.totalMatches + matchScore) / newTotal).toFixed(2)
+          );
+  
+          await tx.user.update({
+            where: { id: entry.userId },
+            data: {
+              totalMatches: newTotal,
+              reliabilityRating: Math.max(1.0, Math.min(5.0, updatedRating)),
+            },
+          });
+        }
+      }
+  
+      return updatedMatch;
+    });
+  }
   static async completeMatchAndScore(
     matchId: string,
     hostId: string,

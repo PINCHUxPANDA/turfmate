@@ -1,0 +1,162 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PLAYER
+  VENUE_OWNER
+  ADMIN
+}
+
+enum SportType {
+  FOOTBALL
+  CRICKET
+  BASKETBALL
+  PICKLEBALL
+  BADMINTON
+}
+
+enum SkillLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum MatchStatus {
+  SCHEDULED
+  OPEN
+  FILLING_FAST
+  FULL
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+}
+
+model User {
+  id                String   @id @default(uuid())
+  name              String
+  email             String   @unique
+  passwordHash      String?
+  role              Role     @default(PLAYER)
+  city              String   @default("Jaipur")
+  avatarUrl         String?
+  sportsProfile     Json?    // e.g., { preferredSports: ["FOOTBALL"], skillLevel: "INTERMEDIATE" }
+  reliabilityRating Float    @default(5.0)
+  totalMatches      Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  ownedVenues   Venue[]
+  hostedMatches Match[]            @relation("MatchHost")
+  participations MatchParticipant[]
+  messages      ChatMessage[]
+
+  @@index([city])
+}
+
+model Venue {
+  id           String      @id @default(uuid())
+  ownerId      String
+  name         String
+  city         String
+  location     String
+  coordinates  Json?       // e.g., { lat: 26.9124, lng: 75.7873 }
+  pricePerHour Float
+  sports       SportType[]
+  amenities    String[]    // e.g., ["Floodlights", "Parking", "Bibs", "Locker Rooms"]
+  images       String[]
+  isVerified   Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // Relations
+  owner     User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  timeSlots TimeSlot[]
+  matches   Match[]
+
+  @@index([city])
+}
+
+model TimeSlot {
+  id        String   @id @default(uuid())
+  venueId   String
+  startTime DateTime
+  endTime   DateTime
+  price     Float
+  isBooked  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  venue Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  match Match?
+
+  @@index([venueId, startTime])
+}
+
+model Match {
+  id             String      @id @default(uuid())
+  hostId         String
+  venueId        String?     // Optional: null if hosted on an open public ground
+  timeSlotId     String?     @unique
+  title          String
+  customLocation String?     // Used when venueId is null (public ground)
+  city           String
+  sportType      SportType
+  skillLevel     SkillLevel  @default(INTERMEDIATE)
+  date           DateTime
+  maxPlayers     Int
+  costPerPerson  Float
+  status         MatchStatus @default(OPEN)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  // Relations
+  host         User               @relation("MatchHost", fields: [hostId], references: [id], onDelete: Cascade)
+  venue        Venue?             @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  timeSlot     TimeSlot?          @relation(fields: [timeSlotId], references: [id], onDelete: SetNull)
+  participants MatchParticipant[]
+  messages     ChatMessage[]
+
+  @@index([city, sportType, status])
+}
+
+model MatchParticipant {
+  id            String        @id @default(uuid())
+  matchId       String
+  userId        String
+  paymentStatus PaymentStatus @default(PENDING)
+  attended      Boolean?
+  joinedAt      DateTime      @default(now())
+
+  // Relations
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Prevents the same player from joining the same match twice
+  @@unique([matchId, userId])
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  matchId   String
+  senderId  String
+  message   String
+  createdAt DateTime @default(now())
+
+  // Relations
+  match  Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  sender User  @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, createdAt])
+}
